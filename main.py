@@ -1,12 +1,15 @@
-import pickle
-import numpy as np
+import pandas as pd
 import numpy as np
 from flask import Flask, request
+import utils as ut
+import datautils as du
 
 app = Flask(__name__)
-# 从文件中加载模型
-with open('rf_model.pkl', 'rb') as f:
-    clf_rf_loaded = pickle.load(f)
+df_job_finish = pd.read_excel('t_stat_job_finish.xls', sheet_name='Sheet1', usecols=['personid',  'jobid'])
+df_exam = pd.read_excel('t_stat_exam_answer.xls', sheet_name='Sheet1', usecols=['personid', 'examscore'])
+df_bbs = pd.read_excel('t_stat_bbs_log.xls', sheet_name='Sheet1', usecols=['personid'])
+df_score = pd.read_excel('t_stat_student_score.xls', sheet_name='Sheet1', usecols=['personid', 'finalscore'])
+df_job = pd.read_excel('t_stat_job_finish.xls', sheet_name='Sheet1', usecols=['personid'])
 
 #预测综合成绩
 @app.route('/predict', methods=['POST'])
@@ -15,57 +18,85 @@ def score_controller():
     data = request.json
     #将字典转换为数组
     param = np.array(list(data.values())).reshape(1, -1)
-    # 进行预测
-    return str(clf_rf_loaded.predict(param)[0])
+    return ut.predict_score(param)
 
 #判断学生学习投入值
-#param：job_finish   完成任务数
-#       bbs_log    参与讨论数
-#       stat_work   完成作业数
-@app.route('/Learning/engagement')
+#param：  personid   学生id
+#         courseid   课程id
+@app.route('/learning/engagement')
 def engagement_controller():
     data = request.json
-    job_finish = int(data.get('job_finish'))
+    personid = int(data.get('personid'))
+    courseid = int(data.get('courseid'))
+    job_finish = du.get_task(personid, courseid)
     bbs_log = int(data.get('bbs_lob'))
     stat_work = int(data.get('stat_work'))
-    return 0.95238*job_finish + 0.9764*bbs_log + 0.9449*stat_work;
+    return ut.engagement((job_finish, bbs_log, stat_work))
 
 
 #判断学生学习互动值
-#param：job_finish   完成任务数
-#       bbs_log    参与讨论数
-#       preemptive_answer  参与抢答数
-#       topic_count    发帖数
-@app.route('/Learning/interaction')
-def engagement_controller():
+#  param: personid 学生id
+#         courseid 课程id
+@app.route('/learning/interaction')
+def interaction_controller():
     data = request.json
-    job_finish = int(data.get('job_finish'))
-    bbs_log = int(data.get('bbs_lob'))
-    preemptive_answer = int(data.get('preemptive_answer'))
-    topic_count = int(data.get('topic_count'))
-    return 0.9142*job_finish + 0.9339*bbs_log + 1.49*preemptive_answer + 1.33*topic_count;
+    personid = int(data.get('personid'))
+    courseid = int(data.get('courseid'))
+    job_finish = du.get_task(personid, courseid)
+    return ut.interaction(job_finish, bbs_log, preemptive_answer, topic_count)
 
 #判断学生学科偏好值
-#param：job_finish   完成任务数
-#       bbs_log    参与讨论数
-#       stat_work   完成作业数
-@app.route('/Learning/preferences')
-def engagement_controller():
+#  param: personid 学生id
+@app.route('/learning/preferences/value')
+def preferences_controller():
     data = request.json
-    job_finish = int(data.get('job_finish'))
-    bbs_log = int(data.get('bbs_lob'))
-    stat_work = int(data.get('stat_work'))
-    return 0.95238*job_finish + 0.9764*bbs_log + 0.9449*stat_work;
+    personid = int(data.get('personid'))
+    courseid = int(data.get('courseid'))
+    job_finish = du.get_task(personid, courseid)
+    return ut.preferences(job_finish, bbs_log, stat_work)
 
-#判断学生学科效果值
-#param：exam_score  平均考试成绩
-#       fianl_score    综合成绩
-@app.route('/Learning/effect')
-def engagement_controller():
+#返回学生偏好学科
+# param: personid
+@app.route('/learning/preferences/subject')
+def preferences_sub_controller():
     data = request.json
-    exam_score = int(data.get('exam_score'))
-    final_score = int(data.get('final_score'))
-    return 1.0339 * exam_score + 2.1579 * final_score
+    personid = int(data.get('personid'))
+    #查询数据获取courseid job bbs work数组
+    courseid = []
+    preferences_value = []
+    for i in range(len(courseid)):
+        preferences_value.append(ut.preferences())
+    maxV = max(preferences_value)
+    ind = preferences_value.index(maxV)
+    return courseid[ind]
+
+
+#判断学生学科产出值
+# param: personid 学生id
+#        courseid
+@app.route('/learning/effect')
+def effect_controller():
+    data = request.json
+    personid = int(data.get('personid'))
+    courseid = int(data.get('courseid'))
+    job_finish = du.get_task(personid, courseid)
+    return ut.effect(exam_score, final_score)
+
+
+
+
+#判断学生的学习风格
+#param: personid
+@app.route('/learning/character')
+def character_controller():
+    data = request.json
+
+
+#返回某门课的学习进度
+# param: personid
+#        courseid
+
+
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000)
